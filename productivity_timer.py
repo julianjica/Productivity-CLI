@@ -243,36 +243,41 @@ def generate_hourly_graph(project_name=None):
         console.print("[yellow]No productive time recorded for graph generation.[/yellow]")
         return
 
-    # Print the histogram bars
+    # === Compact 3-hour tick axis with aligned labels ===
+    CELL_W = 2  # characters per hour "column"
+
+    def cell(ch: str) -> str:
+        # one visible char + padding to fill the cell
+        return ch + " " * (CELL_W - 1)
+
+    # Draw bars (per hour), using a fixed column width
     for level in range(max_bar_height, 0, -1):
-        line = ""
+        line_parts = []
         for hour in range(24):
             duration_seconds = hourly_data[hour].total_seconds()
-            # Calculate the bar height for the current hour
             bar_height = int((duration_seconds / max_duration_for_scaling) * max_bar_height)
-            if bar_height >= level:
-                line += "#  " # Bar segment
-            else:
-                line += "   " # Empty space
-        console.print(line)
+            line_parts.append(cell("#") if bar_height >= level else " " * CELL_W)
+        console.print("".join(line_parts))
 
-    # Print the x-axis (hours)
-    hour_labels = ""
-    for hour in range(24):
-        hour_labels += f"{hour:02d} " # Add a space after each hour label
-    console.print(hour_labels)
+    # Tick row: | at 00,03,06,… ; - elsewhere (keeps the | - - | - - pattern)
+    tick_row = "".join(cell("|") if h % 3 == 0 else cell("-") for h in range(24))
+    console.print(tick_row)
 
-    # Add a legend for the histogram scaling
+    # Label row: place the hour *starting under the |* (00, 03, 06, …)
+    label_row = "".join(
+        (f"{h:02d}" + " " * (CELL_W - 2)) if h % 3 == 0 else (" " * CELL_W)
+        for h in range(24)
+    )
+    console.print(label_row)
+
+    # Legend (unchanged)
     value_per_hash_seconds = max_duration_for_scaling / max_bar_height
-    
-    legend_display = ""
     if value_per_hash_seconds < 60:
         legend_display = f"{int(value_per_hash_seconds)}s"
     elif value_per_hash_seconds < 3600:
         legend_display = f"{int(value_per_hash_seconds / 60)}m"
     else:
         legend_display = f"{value_per_hash_seconds / 3600:.1f}h"
-
     console.print(f"One # represents approximately {legend_display} of activity.")
 
 def run_timer(project_name, task, interval_minutes):
