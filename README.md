@@ -1,67 +1,81 @@
-#  Productivity Timer
+# ⏱️ Productivity Timer & Reporter CLI
 
-A command-line time tracking tool designed for developers and anyone who wants to monitor time spent on projects and tasks directly from the terminal.
+A robust command-line interface (CLI) tool designed for tracking time spent on projects and tasks, and generating insightful productivity reports. This tool draws inspiration from the elegant CLI experience of [Chronologicon](https://github.com/rutherfordcraze/chronologicon).
 
-This tool provides a visually rich timer, persistent logging, and detailed reporting to help you understand your workflow and improve your productivity.
-## Features
+## ✨ Features
 
-*   **Interactive Timer:** A full-screen timer with a progress bar that cycles through colors for each work interval.
-*   **Persistent Logging:** Automatically saves your sessions to a `productivity_log.csv` file. It intelligently consolidates time, summing up durations for the same project/task.
-*   **Configurable Intervals:** Set a default work interval (in minutes) that persists between sessions.
-*   **Intuitive Controls:**
-    *   **Enter:** Pause and resume the timer.
-    *   **Ctrl+C:** Instantly save the session and exit.
-*   **Detailed Reporting:**
-    *   Generate a summary report showing time spent per project and its percentage of the total.
-    *   Generate a detailed report for a specific project, breaking down time by task.
-*   **Historical Context:** When you start a timer, it shows you the total time you've previously logged for that specific task.
-## Requirements
-*   Python 3
-*   `rich` library
-## Installation
+This application provides powerful features to help you understand and manage your time:
 
-1.  Ensure you have Python 3 installed.
-2.  Install the `rich` library (using `pip`)
+-   **Flexible Time Tracking**: Log time spent on any `project` and `task` combination. Ideal for tracking work sessions, study time, or any activity.
+-   **Interactive Timer**: A real-time command-line timer that displays elapsed time and progress. Features include:
+    -   **Pause/Resume**: Easily pause and resume your active session by pressing `Enter`.
+    -   **Exit**: Save your current session's progress and exit cleanly with `Ctrl+C`.
+-   **Comprehensive Reporting**: Gain insights into your productivity with various report types:
+    -   **Overall Summary**: View total time spent across all your projects.
+    -   **Project-Specific Reports**: Get a detailed breakdown of time spent on individual tasks within a chosen project.
+    -   **Hourly Productivity Graph**: Visualize your activity patterns throughout the day with an ASCII histogram.
+    -   **Recent History Graph**: See your daily productivity trends over the last 30 days (or a custom period) with an ASCII histogram.
+-   **Data Persistence**: All your logged sessions are saved to a `productivity_log.csv` file, ensuring your data is never lost.
+-   **Configurable Intervals**: Set a default timer interval for new sessions, saved in `config.json`.
+-   **Rich CLI Experience**: Leverages the `rich` library for beautiful, readable, and interactive terminal output.
+
+## 🚀 Getting Started
+
+### Installation
+
+1.  **Clone the repository**:
     ```bash
-    pip install rich
+    git clone https://github.com/your-username/productivity-timer-cli.git
+    cd productivity-timer-cli
     ```
-## Usage
-The script is controlled via command-line arguments.
-### Running the Timer
-To start a timer, provide a project name and a task name.
-```bash
-python3 productivity_timer.py "My Awesome Project" "Implement feature X"
-```
-*   **To Pause/Resume:** Press `Enter`.
-*   **To Stop & Save:** Press `Ctrl+C`.
-### Configuration
-Set a default interval (e.g., 45 minutes) that will be used for all future timer sessions.
-```bash
-python3 productivity_timer.py --set-interval 45
-```
+    *(Note: Replace `https://github.com/your-username/productivity-timer-cli.git` with the actual repository URL if this project is hosted on GitHub.)*
 
-You can override the default for a single session:
+2.  **Create a virtual environment** (recommended):
+    ```bash
+    python3 -m venv .venv
+    source .venv/bin/activate
+    ```
 
-```bash
-python3 productivity_timer.py "Project" "Task" --interval 15
-```
-### Generating Reports
+3.  **Install dependencies**:
+    ```bash
+    pip install -e .
+    ```
 
-**Summary Report:**
-To see a summary of time spent on all projects, run the `--report` flag without a project name.
+### Usage
 
-```bash
-python3 productivity_timer.py --report
-```
+Run the timer and generate reports directly from your terminal:
 
-**Project-Specific Report:**
-To get a detailed report for a single project, provide the project name.
+-   **Start a new tracking session**:
+    ```bash
+    productivity_timer "My Project Name" "Specific Task Description"
+    ```
+    *(The timer will start, and you can pause/resume with `Enter` or save/exit with `Ctrl+C`.)*
 
-```bash
-python3 productivity_timer.py --report "My Awesome Project"
-```
+-   **Set a default timer interval** (e.g., 25 minutes):
+    ```bash
+    productivity_timer --set-interval 25
+    ```
 
-## Files
+-   **Start a session with a custom interval for this run only** (e.g., 45 minutes):
+    ```bash
+    productivity_timer "Deep Work" "Coding Feature X" --interval 45
+    ```
 
-*   `productivity_log.csv`: This file stores your session data. Each row contains the date of the last session, project name, task name, and the total duration.
-*   `config.json`: This file stores your default interval setting.
+-   **Generate an overall productivity summary report** (includes hourly and recent history graphs for all projects):
+    ```bash
+    productivity_timer --report
+    ```
+
+-   **Generate a detailed report for a specific project** (e.g., "My Project Name"), including task breakdown and graphs:
+    ```bash
+    productivity_timer --report "My Project Name"
+    ```
+
+-   **Get help and see all available commands**:
+    ```bash
+    productivity_timer --help
+    ```
+
+## ❤️ Inspiration
+
+This project draws significant inspiration from [Chronologicon](https://github.com/rutherfordcraze/chronologicon), a fantastic CLI tool for time tracking and task management, which sadly is not in development anymore.
