@@ -12,6 +12,7 @@ from rich.progress import Progress, BarColumn, TextColumn
 from rich.panel import Panel
 from rich.live import Live
 from rich.console import Group
+from rich.layout import Layout
 from rich.text import Text
 
 CONFIG_FILE = 'config.json'
@@ -45,18 +46,24 @@ def run_timer(project_name, task, interval_minutes):
     interval_seconds = interval_minutes * 60
     paused = False
 
-    header_panel = Panel(f"[bold]Project:[/ ] {project_name}\n[bold]Task:[/ ] {task}", title="Productivity Timer", border_style="magenta")
-    
-    # Store original terminal settings
+    # Create layout
+    layout = Layout()
+    layout.split(
+        Layout(name="main"),
+        Layout(name="footer", size=1)
+    )
+    footer_text = Text("Press Enter to pause/resume. Press Ctrl+C to save and exit.", justify="center", style="dim")
+    layout["footer"].update(footer_text)
+
     old_settings = termios.tcgetattr(sys.stdin)
     try:
-        # Set terminal to cbreak mode
         tty.setcbreak(sys.stdin.fileno())
-        with Live(None, screen=True, redirect_stderr=False, auto_refresh=False) as live:
+        with Live(layout, screen=True, redirect_stderr=False, auto_refresh=False) as live:
             while True:
                 current_color = colors[color_index % len(colors)]
                 
-                block_text = Text(f"Block {block_count} of {interval_minutes} minutes", justify="center", style="cyan bold")
+                header_panel = Panel(f"[bold]Project:[/ ] {project_name}\n[bold]Task:[/ ] {task}", title="Productivity Timer", border_style="magenta")
+                block_text = Text(f"Block {block_count} of {interval_minutes} minutes.", justify="center", style="cyan bold")
                 progress = Progress(
                     TextColumn(f"[bold {current_color}]" + "Total Time: {task.fields[timer_display]}"),
                     BarColumn(bar_width=None, style=current_color),
@@ -64,34 +71,36 @@ def run_timer(project_name, task, interval_minutes):
                 )
                 
                 task_id = progress.add_task("interval_progress", total=interval_seconds, timer_display="00:00:00")
-                
-                # Each block is one interval
+                main_content = Group(header_panel, block_text, progress)
+                layout["main"].update(main_content)
+                live.refresh()
+
                 for i in range(interval_seconds):
-                    # Check for input without blocking
                     if select.select([sys.stdin], [], [], 0)[0]:
                         key = sys.stdin.read(1)
-                        if key == '\n': # Enter key
+                        if key == '\n':
                             paused = not paused
 
                     if paused:
-                        pause_text = Text("PAUSED. Press Enter to resume.", justify="center", style="yellow")
-                        display_group = Group(header_panel, block_text, progress, pause_text)
-                        live.update(display_group, refresh=True)
-                        # Wait for unpause
+                        pause_text = Text("PAUSED", justify="center", style="yellow")
+                        paused_content = Group(header_panel, block_text, progress, pause_text)
+                        layout["main"].update(paused_content)
+                        live.refresh()
                         while paused:
                             if select.select([sys.stdin], [], [], 0.1)[0]:
                                 key = sys.stdin.read(1)
                                 if key == '\n':
                                     paused = False
-                        continue # Resume the timer loop
+                        continue
 
                     mins, secs = divmod(seconds, 60)
                     hours, mins = divmod(mins, 60)
                     timer_display = f'{hours:02d}:{mins:02d}:{secs:02d}'
                     progress.update(task_id, advance=1, timer_display=timer_display)
                     
-                    display_group = Group(header_panel, block_text, progress)
-                    live.update(display_group, refresh=True)
+                    main_content = Group(header_panel, block_text, progress)
+                    layout["main"].update(main_content)
+                    live.refresh()
                     
                     time.sleep(1)
                     seconds += 1
@@ -100,9 +109,8 @@ def run_timer(project_name, task, interval_minutes):
                 block_count += 1
 
     except KeyboardInterrupt:
-        pass # Exit gracefully
+        pass
     finally:
-        # Restore terminal settings
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
         log_session(project_name, task, seconds)
         print("\nTimer stopped.")
