@@ -25,7 +25,7 @@ This application provides powerful features to help you understand and manage yo
 
 1.  **Clone the repository**:
     ```bash
-    git clone https://github.com/julianjica/Productivity-CLI/tree/master
+    git clone https://github.com/julianjica/Productivity-CLI.git
     cd productivity-timer-cli
     ```
 
