@@ -17,6 +17,8 @@ from rich.layout import Layout
 from rich.table import Table
 from rich.text import Text
 
+console = Console()
+
 CONFIG_FILE = 'config.json'
 LOG_FILE = 'productivity_log.csv'
 
@@ -32,59 +34,72 @@ def save_config(config):
 
 def parse_duration(duration_str):
     try:
+        # Handle cases with days (e.g., "1 day, 0:00:00")
         if ',' in duration_str:
             days_str, time_str = duration_str.split(', ')
             days = int(days_str.split()[0])
-            parts = list(map(int, time_str.split(':')))
-            return timedelta(days=days, hours=parts[0], minutes=parts[1], seconds=parts[2])
         else:
-            parts = list(map(int, duration_str.split(':')))
-            return timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2])
+            days = 0
+            time_str = duration_str
+
+        # Handle microseconds by splitting at the dot
+        if '.' in time_str:
+            time_str = time_str.split('.')[0]
+
+        parts = list(map(int, time_str.split(':')))
+        return timedelta(days=days, hours=parts[0], minutes=parts[1], seconds=parts[2])
     except (ValueError, IndexError):
         return timedelta()
 
 def get_historical_time(project, task):
     if not os.path.isfile(LOG_FILE):
         return "0:00:00"
+    total_duration = timedelta()
     with open(LOG_FILE, 'r', newline='') as f:
         reader = csv.DictReader(f)
-        for row in reader:
-            if row['Project'] == project and row['Task'] == task:
-                return row['Duration']
-    return "0:00:00"
-
-def log_session(project, task, seconds_spent):
-    if seconds_spent < 1:
-        return
-    fieldnames = ['Date', 'Project', 'Task', 'Duration']
-    new_duration = timedelta(seconds=int(seconds_spent))
-    records = []
-    entry_found = False
-    if os.path.isfile(LOG_FILE):
-        with open(LOG_FILE, 'r', newline='') as f:
-            reader = csv.DictReader(f)
+        try:
             for row in reader:
-                if row.get('Project') == project and row.get('Task') == task:
-                    existing_duration = parse_duration(row['Duration'])
-                    total_duration = existing_duration + new_duration
-                    row['Duration'] = str(total_duration)
-                    row['Date'] = datetime.now().strftime('%Y-%m-%d')
-                    entry_found = True
-                records.append(row)
-    if not entry_found:
-        records.append({
-            'Date': datetime.now().strftime('%Y-%m-%d'),
-            'Project': project,
-            'Task': task,
-            'Duration': str(new_duration)
-        })
-    with open(LOG_FILE, 'w', newline='') as f:
+                if row['Project'] == project and row['Task'] == task:
+                    total_duration += parse_duration(row['Duration'])
+        except KeyError:
+            console.print(f"[bold red]Warning:[/bold red] The log file '{LOG_FILE}' has an outdated format. Please delete it to start a new log.")
+            return "0:00:00"
+    return str(total_duration)
+
+def log_session(project, task, start_time, end_time):
+    duration = end_time - start_time
+    if duration.total_seconds() < 1:
+        return
+
+    fieldnames = ['Date', 'Project', 'Task', 'Start Time', 'End Time', 'Duration']
+    
+    log_entry = {
+        'Date': start_time.strftime('%Y-%m-%d'),
+        'Project': project,
+        'Task': task,
+        'Start Time': start_time.strftime('%H:%M:%S'),
+        'End Time': end_time.strftime('%H:%M:%S'),
+        'Duration': str(duration)
+    }
+
+    file_exists = os.path.isfile(LOG_FILE)
+    if file_exists:
+        with open(LOG_FILE, 'r', newline='') as f:
+            reader = csv.reader(f)
+            header = next(reader, None)
+            if header != fieldnames:
+                # If header doesn't match, assume old format or corrupted, and rewrite
+                # For simplicity, we'll just create a new file with the correct header
+                # In a real app, you might want to migrate data or warn the user.
+                file_exists = False # Force rewrite
+
+    with open(LOG_FILE, 'a' if file_exists else 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(records)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(log_entry)
 
 def generate_summary_report():
-    console = Console()
     if not os.path.isfile(LOG_FILE):
         console.print(f"[yellow]Log file '{LOG_FILE}' not found.[/yellow]")
         return
@@ -92,8 +107,12 @@ def generate_summary_report():
     project_times = defaultdict(timedelta)
     with open(LOG_FILE, 'r', newline='') as f:
         reader = csv.DictReader(f)
-        for row in reader:
-            project_times[row['Project']] += parse_duration(row['Duration'])
+        try:
+            for row in reader:
+                project_times[row['Project']] += parse_duration(row['Duration'])
+        except KeyError:
+            console.print(f"[bold red]Warning:[/bold red] The log file '{LOG_FILE}' has an outdated format. Please delete it to start a new log.")
+            return
 
     if not project_times:
         console.print("[yellow]No data found in log file.[/yellow]")
@@ -118,36 +137,38 @@ def generate_summary_report():
     console.print(f"[bold]Grand total time for all projects:[/bold] {grand_total_time}")
 
 def generate_project_report(project_name):
-    console = Console()
     if not os.path.isfile(LOG_FILE):
         console.print(f"[yellow]Log file '{LOG_FILE}' not found.[/yellow]")
         return
 
-    project_tasks = []
+    task_times = defaultdict(timedelta)
     with open(LOG_FILE, 'r', newline='') as f:
         reader = csv.DictReader(f)
-        for row in reader:
-            if row.get('Project') == project_name:
-                project_tasks.append(row)
+        try:
+            for row in reader:
+                if row.get('Project') == project_name:
+                    task_times[row['Task']] += parse_duration(row['Duration'])
+        except KeyError:
+            console.print(f"[bold red]Warning:[/bold red] The log file '{LOG_FILE}' has an outdated format. Please delete it to start a new log.")
+            return
 
-    if not project_tasks:
+    if not task_times:
         console.print(f"[yellow]No data found for project '{project_name}'.[/yellow]")
         return
 
-    total_project_time = sum([parse_duration(task['Duration']) for task in project_tasks], timedelta())
+    total_project_time = sum(task_times.values(), timedelta())
 
     table = Table()
     table.add_column("Task", style="magenta")
     table.add_column("Time Spent", style="green")
     table.add_column("Percentage", style="blue")
 
-    for task in sorted(project_tasks, key=lambda x: x['Task']):
-        task_duration = parse_duration(task['Duration'])
+    for task, total_time in sorted(task_times.items()):
         if total_project_time.total_seconds() > 0:
-            percentage = (task_duration.total_seconds() / total_project_time.total_seconds()) * 100
+            percentage = (total_time.total_seconds() / total_project_time.total_seconds()) * 100
         else:
             percentage = 0
-        table.add_row(task['Task'], str(task_duration), f"{percentage:.2f}%")
+        table.add_row(task, str(total_time), f"{percentage:.2f}%")
     
     console.print(f"Productivity Report for Project: [bold cyan]{project_name}[/bold cyan]")
     console.print(table)
@@ -169,6 +190,7 @@ def run_timer(project_name, task, interval_minutes):
     layout["footer"].update(footer_text)
 
     old_settings = termios.tcgetattr(sys.stdin)
+    start_time = datetime.now()
     try:
         tty.setcbreak(sys.stdin.fileno())
         with Live(layout, screen=True, redirect_stderr=False, auto_refresh=False) as live:
@@ -225,8 +247,9 @@ def run_timer(project_name, task, interval_minutes):
     except KeyboardInterrupt:
         pass
     finally:
+        end_time = datetime.now()
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-        log_session(project_name, task, seconds)
+        log_session(project_name, task, start_time, end_time)
         print("\nTimer stopped.")
         duration_str = str(timedelta(seconds=int(seconds)))
         print(f"Total time spent this session: {duration_str}")
