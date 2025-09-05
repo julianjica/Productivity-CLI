@@ -36,9 +36,19 @@ def parse_duration(duration_str):
     except (ValueError, IndexError):
         return timedelta()
 
+def get_historical_time(project, task):
+    if not os.path.isfile(LOG_FILE):
+        return "0:00:00"
+    with open(LOG_FILE, 'r', newline='') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row['Project'] == project and row['Task'] == task:
+                return row['Duration']
+    return "0:00:00"
+
 def log_session(project, task, seconds_spent):
     if seconds_spent == 0:
-        return # Do not log empty sessions
+        return
 
     fieldnames = ['Date', 'Project', 'Task', 'Duration']
     new_duration = timedelta(seconds=seconds_spent)
@@ -53,7 +63,7 @@ def log_session(project, task, seconds_spent):
                     existing_duration = parse_duration(row['Duration'])
                     total_duration = existing_duration + new_duration
                     row['Duration'] = str(total_duration)
-                    row['Date'] = datetime.now().strftime('%Y-%m-%d') # Update date to last session
+                    row['Date'] = datetime.now().strftime('%Y-%m-%d')
                     entry_found = True
                 records.append(row)
 
@@ -78,6 +88,8 @@ def run_timer(project_name, task, interval_minutes):
     interval_seconds = interval_minutes * 60
     paused = False
 
+    historical_time = get_historical_time(project_name, task)
+
     layout = Layout()
     layout.split(
         Layout(name="main"),
@@ -93,7 +105,8 @@ def run_timer(project_name, task, interval_minutes):
             while True:
                 current_color = colors[color_index % len(colors)]
                 
-                header_panel = Panel(f"[bold]Project:[/ ] {project_name}\n[bold]Task:[/ ] {task}", title="Productivity Timer", border_style="magenta")
+                header_text = f"[bold]Project:[/ ] {project_name}\n[bold]Task:[/ ] {task}\n[bold]Previously Logged:[/ ] {historical_time}"
+                header_panel = Panel(header_text, title="Productivity Timer", border_style="magenta")
                 block_text = Text(f"Block {block_count} of {interval_minutes} minutes.", justify="center", style="cyan bold")
                 progress = Progress(
                     TextColumn(f"[bold {current_color}]" + "Total Time: {task.fields[timer_display]}"),
