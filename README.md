@@ -25,10 +25,9 @@ This application provides powerful features to help you understand and manage yo
 
 1.  **Clone the repository**:
     ```bash
-    git clone https://github.com/your-username/productivity-timer-cli.git
+    git clone https://github.com/julianjica/Productivity-CLI/edit/master/README.md
     cd productivity-timer-cli
     ```
-    *(Note: Replace `https://github.com/your-username/productivity-timer-cli.git` with the actual repository URL if this project is hosted on GitHub.)*
 
 2.  **Create a virtual environment** (recommended):
     ```bash
