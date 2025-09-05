@@ -174,6 +174,107 @@ def generate_project_report(project_name):
     console.print(table)
     console.print(f"[bold]Total time for project '{project_name}':[/bold] {total_project_time}")
 
+def generate_hourly_graph(project_name=None):
+    console.print(f"\n[bold cyan]Hourly Productivity Graph ({'All Projects' if project_name is None else f'Project: {project_name}'})[/bold cyan]")
+
+    if not os.path.isfile(LOG_FILE):
+        console.print(f"[yellow]Log file '{LOG_FILE}' not found.[/yellow]")
+        return
+
+    hourly_data = defaultdict(timedelta)
+    max_duration_seconds = 0
+
+    with open(LOG_FILE, 'r', newline='') as f:
+        reader = csv.DictReader(f)
+        try:
+            for row in reader:
+                if project_name and row.get('Project') != project_name:
+                    continue
+
+                start_time_str = row.get('Start Time')
+                duration_str = row.get('Duration')
+
+                if not start_time_str or not duration_str:
+                    continue
+
+                try:
+                    start_datetime_str = row.get('Date') + " " + start_time_str
+                    start_datetime = datetime.strptime(start_datetime_str, '%Y-%m-%d %H:%M:%S')
+                    duration = parse_duration(duration_str)
+                    end_datetime = start_datetime + duration
+
+                    current_time = start_datetime
+                    while current_time < end_datetime:
+                        hour = current_time.hour
+                        next_hour_boundary = current_time.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+                        
+                        time_in_this_hour = min(end_datetime, next_hour_boundary) - current_time
+                        hourly_data[hour] += time_in_this_hour
+                        current_time = next_hour_boundary
+
+                except ValueError:
+                    # Handle cases where time parsing might fail
+                    continue
+        except KeyError:
+            console.print(f"[bold red]Warning:[/bold red] The log file '{LOG_FILE}' has an outdated format. Please delete it to start a new log.")
+            return
+
+    if not hourly_data:
+        console.print("[yellow]No data found for graph generation.[/yellow]")
+        return
+
+    # Determine max duration for scaling
+    for duration in hourly_data.values():
+        max_duration_seconds = max(max_duration_seconds, duration.total_seconds())
+
+    if max_duration_seconds == 0:
+        console.print("[yellow]No productive time recorded for graph generation.[/yellow]")
+        return
+
+    # Generate ASCII histogram
+    max_bar_height = 10  # Max height of the histogram bars
+
+    # Find the maximum duration to scale the bars
+    max_duration_for_scaling = 0
+    for duration in hourly_data.values():
+        max_duration_for_scaling = max(max_duration_for_scaling, duration.total_seconds())
+
+    if max_duration_for_scaling == 0:
+        console.print("[yellow]No productive time recorded for graph generation.[/yellow]")
+        return
+
+    # Print the histogram bars
+    for level in range(max_bar_height, 0, -1):
+        line = ""
+        for hour in range(24):
+            duration_seconds = hourly_data[hour].total_seconds()
+            # Calculate the bar height for the current hour
+            bar_height = int((duration_seconds / max_duration_for_scaling) * max_bar_height)
+            if bar_height >= level:
+                line += "#  " # Bar segment
+            else:
+                line += "   " # Empty space
+        console.print(line)
+
+    # Print the x-axis (hours)
+    hour_labels = ""
+    for hour in range(24):
+        hour_labels += f"{hour:02d} " # Add a space after each hour label
+    console.print(hour_labels)
+
+    # Add a legend for the histogram scaling
+    value_per_hash_seconds = max_duration_for_scaling / max_bar_height
+    
+    legend_display = ""
+    if value_per_hash_seconds < 60:
+        legend_display = f"{int(value_per_hash_seconds)}s"
+    elif value_per_hash_seconds < 3600:
+        legend_display = f"{int(value_per_hash_seconds / 60)}m"
+    else:
+        legend_display = f"{value_per_hash_seconds / 3600:.1f}h"
+
+    console.print(f"One # represents approximately {legend_display} of activity.")
+
 def run_timer(project_name, task, interval_minutes):
     seconds = 0
     color_index = 0
@@ -267,8 +368,10 @@ def main():
     if args.report is not None:
         if args.report == '_ALL_PROJECTS_':
             generate_summary_report()
+            generate_hourly_graph()
         else:
             generate_project_report(args.report)
+            generate_hourly_graph(args.report)
         return
 
     config = load_config()
