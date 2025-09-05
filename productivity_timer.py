@@ -280,6 +280,65 @@ def generate_hourly_graph(project_name=None):
         legend_display = f"{value_per_hash_seconds / 3600:.1f}h"
     console.print(f"One # represents approximately {legend_display} of activity.")
 
+def generate_recent_history_graph(project_name=None, days=30):
+    console.print(f"\n[bold cyan]Recent History Histogram ({'All Projects' if project_name is None else f'Project: {project_name}'})[/bold cyan]")
+
+    if not os.path.isfile(LOG_FILE):
+        console.print(f"[yellow]Log file '{LOG_FILE}' not found.[/yellow]")
+        return
+
+    # Track hours per day (key = days ago)
+    today = datetime.now().date()
+    daily_hours = {d: 0.0 for d in range(days)}  # store hours
+    max_hours = 0.0
+
+    with open(LOG_FILE, 'r', newline='') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if project_name and row.get('Project') != project_name:
+                continue
+
+            try:
+                session_date = datetime.strptime(row['Date'], "%Y-%m-%d").date()
+                delta_days = (today - session_date).days
+                if 0 <= delta_days < days:
+                    duration = parse_duration(row['Duration'])
+                    hours = duration.total_seconds() / 3600
+                    daily_hours[delta_days] += hours
+                    max_hours = max(max_hours, daily_hours[delta_days])
+            except (ValueError, KeyError):
+                continue
+
+    if max_hours == 0:
+        console.print("[yellow]No recent activity found.[/yellow]")
+        return
+
+    # Draw histogram (vertical bars)
+    max_bar_height = 10
+    for level in range(max_bar_height, 0, -1):
+        line = ""
+        for d in range(days-1, -1, -1):  # left = oldest, right = today
+            bar_height = int((daily_hours[d] / max_hours) * max_bar_height)
+            line += "# " if bar_height >= level else "  "
+        console.print(line)
+
+    # Tick row: every 5 days ago
+    tick_row = "".join("| " if d % 5 == 0 else "- " for d in range(days-1, -1, -1))
+    console.print(tick_row)
+
+    # Label row: show "days ago" under each tick (00 = today at the far right)
+    label_row = "".join(
+        f"{d:02d}" if d % 5 == 0 else "  "
+        for d in range(days-1, -1, -1)
+    )
+    console.print(label_row)
+
+    # Legend
+    value_per_hash_hours = max_hours / max_bar_height
+    console.print(f"One # represents approximately {value_per_hash_hours:.2f}h of activity.")
+    console.print("X-axis = days ago (00 = today, increases to the left).")
+
+
 def run_timer(project_name, task, interval_minutes):
     seconds = 0
     color_index = 0
@@ -374,10 +433,13 @@ def main():
         if args.report == '_ALL_PROJECTS_':
             generate_summary_report()
             generate_hourly_graph()
+            generate_recent_history_graph()
         else:
             generate_project_report(args.report)
             generate_hourly_graph(args.report)
+            generate_recent_history_graph(args.report)
         return
+
 
     config = load_config()
 
