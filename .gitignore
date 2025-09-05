@@ -1,2 +1,4 @@
 config.json
 productivity_log.csv
+.python-version
+uv.lock
