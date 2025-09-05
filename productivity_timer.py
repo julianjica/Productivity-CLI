@@ -28,15 +28,47 @@ def save_config(config):
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=4)
 
+def parse_duration(duration_str):
+    """Parses a HH:MM:SS string into a timedelta object."""
+    try:
+        parts = list(map(int, duration_str.split(':')))
+        return timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2])
+    except (ValueError, IndexError):
+        return timedelta()
+
 def log_session(project, task, seconds_spent):
-    file_exists = os.path.isfile(LOG_FILE)
-    with open(LOG_FILE, 'a', newline='') as f:
-        writer = csv.writer(f)
-        if not file_exists:
-            writer.writerow(['Date', 'Project', 'Task', 'Duration'])
-        
-        duration = str(timedelta(seconds=seconds_spent))
-        writer.writerow([datetime.now().strftime('%Y-%m-%d'), project, task, duration])
+    if seconds_spent == 0:
+        return # Do not log empty sessions
+
+    fieldnames = ['Date', 'Project', 'Task', 'Duration']
+    new_duration = timedelta(seconds=seconds_spent)
+    records = []
+    entry_found = False
+
+    if os.path.isfile(LOG_FILE):
+        with open(LOG_FILE, 'r', newline='') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row['Project'] == project and row['Task'] == task:
+                    existing_duration = parse_duration(row['Duration'])
+                    total_duration = existing_duration + new_duration
+                    row['Duration'] = str(total_duration)
+                    row['Date'] = datetime.now().strftime('%Y-%m-%d') # Update date to last session
+                    entry_found = True
+                records.append(row)
+
+    if not entry_found:
+        records.append({
+            'Date': datetime.now().strftime('%Y-%m-%d'),
+            'Project': project,
+            'Task': task,
+            'Duration': str(new_duration)
+        })
+
+    with open(LOG_FILE, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(records)
 
 def run_timer(project_name, task, interval_minutes):
     seconds = 0
@@ -46,7 +78,6 @@ def run_timer(project_name, task, interval_minutes):
     interval_seconds = interval_minutes * 60
     paused = False
 
-    # Create layout
     layout = Layout()
     layout.split(
         Layout(name="main"),
