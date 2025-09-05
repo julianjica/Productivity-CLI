@@ -8,6 +8,7 @@ import select
 import tty
 import termios
 from datetime import datetime, timedelta
+from collections import defaultdict
 from rich.progress import Progress, BarColumn, TextColumn
 from rich.panel import Panel
 from rich.live import Live
@@ -30,9 +31,8 @@ def save_config(config):
         json.dump(config, f, indent=4)
 
 def parse_duration(duration_str):
-    """Parses a HH:MM:SS string into a timedelta object."""
     try:
-        if '.' in duration_str: # Handle days, e.g., '1 day, 1:00:00'
+        if ',' in duration_str:
             days_str, time_str = duration_str.split(', ')
             days = int(days_str.split()[0])
             parts = list(map(int, time_str.split(':')))
@@ -56,12 +56,10 @@ def get_historical_time(project, task):
 def log_session(project, task, seconds_spent):
     if seconds_spent < 1:
         return
-
     fieldnames = ['Date', 'Project', 'Task', 'Duration']
     new_duration = timedelta(seconds=int(seconds_spent))
     records = []
     entry_found = False
-
     if os.path.isfile(LOG_FILE):
         with open(LOG_FILE, 'r', newline='') as f:
             reader = csv.DictReader(f)
@@ -73,7 +71,6 @@ def log_session(project, task, seconds_spent):
                     row['Date'] = datetime.now().strftime('%Y-%m-%d')
                     entry_found = True
                 records.append(row)
-
     if not entry_found:
         records.append({
             'Date': datetime.now().strftime('%Y-%m-%d'),
@@ -81,13 +78,46 @@ def log_session(project, task, seconds_spent):
             'Task': task,
             'Duration': str(new_duration)
         })
-
     with open(LOG_FILE, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(records)
 
-def generate_report(project_name):
+def generate_summary_report():
+    console = Console()
+    if not os.path.isfile(LOG_FILE):
+        console.print(f"[yellow]Log file '{LOG_FILE}' not found.[/yellow]")
+        return
+
+    project_times = defaultdict(timedelta)
+    with open(LOG_FILE, 'r', newline='') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            project_times[row['Project']] += parse_duration(row['Duration'])
+
+    if not project_times:
+        console.print("[yellow]No data found in log file.[/yellow]")
+        return
+
+    grand_total_time = sum(project_times.values(), timedelta())
+
+    table = Table()
+    table.add_column("Project", style="magenta")
+    table.add_column("Total Time Spent", style="green")
+    table.add_column("Percentage of Total", style="blue")
+
+    for project, total_time in sorted(project_times.items()):
+        if grand_total_time.total_seconds() > 0:
+            percentage = (total_time.total_seconds() / grand_total_time.total_seconds()) * 100
+        else:
+            percentage = 0
+        table.add_row(project, str(total_time), f"{percentage:.2f}%")
+    
+    console.print("Overall Productivity Summary")
+    console.print(table)
+    console.print(f"[bold]Grand total time for all projects:[/bold] {grand_total_time}")
+
+def generate_project_report(project_name):
     console = Console()
     if not os.path.isfile(LOG_FILE):
         console.print(f"[yellow]Log file '{LOG_FILE}' not found.[/yellow]")
@@ -104,16 +134,14 @@ def generate_report(project_name):
         console.print(f"[yellow]No data found for project '{project_name}'.[/yellow]")
         return
 
-    total_project_time = timedelta()
-    for task in project_tasks:
-        total_project_time += parse_duration(task['Duration'])
+    total_project_time = sum([parse_duration(task['Duration']) for task in project_tasks], timedelta())
 
-    table = Table(title=f"[bold cyan]{project_name}[/bold cyan]")
+    table = Table()
     table.add_column("Task", style="magenta")
     table.add_column("Time Spent", style="green")
     table.add_column("Percentage", style="blue")
 
-    for task in project_tasks:
+    for task in sorted(project_tasks, key=lambda x: x['Task']):
         task_duration = parse_duration(task['Duration'])
         if total_project_time.total_seconds() > 0:
             percentage = (task_duration.total_seconds() / total_project_time.total_seconds()) * 100
@@ -121,6 +149,7 @@ def generate_report(project_name):
             percentage = 0
         table.add_row(task['Task'], str(task_duration), f"{percentage:.2f}%")
     
+    console.print(f"Productivity Report for Project: [bold cyan]{project_name}[/bold cyan]")
     console.print(table)
     console.print(f"[bold]Total time for project '{project_name}':[/bold] {total_project_time}")
 
@@ -146,7 +175,7 @@ def run_timer(project_name, task, interval_minutes):
             while True:
                 current_color = colors[color_index % len(colors)]
                 
-                header_text = f"[bold]Project:[/ ] {project_name}\n[bold]Task:[/ ] {task}\n[bold]Previously Logged:[/ ] {historical_time}"
+                header_text = f"[bold]Project:[/bold] {project_name}\n[bold]Task:[/bold] {task}\n[bold]Previously Logged:[/bold] {historical_time}"
                 header_panel = Panel(header_text, title="Productivity Timer", border_style="magenta")
                 block_text = Text(f"Block {block_count} of {interval_minutes} minutes.", justify="center", style="cyan bold")
                 progress = Progress(
@@ -208,12 +237,15 @@ def main():
     parser.add_argument('task', type=str, nargs='?', help='The description of the task.')
     parser.add_argument('--set-interval', type=int, metavar='MINUTES', help='Set the default timer interval in minutes for future runs.')
     parser.add_argument('--interval', type=int, metavar='MINUTES', help='Override the default interval for this run.')
-    parser.add_argument('--report', type=str, metavar='PROJECT_NAME', help='Generate a report for a specific project.')
+    parser.add_argument('--report', nargs='?', const='_ALL_PROJECTS_', default=None, help='Generate a report. Provide a project name for a detailed report, or no name for a summary.')
 
     args = parser.parse_args()
     
-    if args.report:
-        generate_report(args.report)
+    if args.report is not None:
+        if args.report == '_ALL_PROJECTS_':
+            generate_summary_report()
+        else:
+            generate_project_report(args.report)
         return
 
     config = load_config()
