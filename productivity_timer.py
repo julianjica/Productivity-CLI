@@ -11,8 +11,9 @@ from datetime import datetime, timedelta
 from rich.progress import Progress, BarColumn, TextColumn
 from rich.panel import Panel
 from rich.live import Live
-from rich.console import Group
+from rich.console import Console, Group
 from rich.layout import Layout
+from rich.table import Table
 from rich.text import Text
 
 CONFIG_FILE = 'config.json'
@@ -31,8 +32,14 @@ def save_config(config):
 def parse_duration(duration_str):
     """Parses a HH:MM:SS string into a timedelta object."""
     try:
-        parts = list(map(int, duration_str.split(':')))
-        return timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2])
+        if '.' in duration_str: # Handle days, e.g., '1 day, 1:00:00'
+            days_str, time_str = duration_str.split(', ')
+            days = int(days_str.split()[0])
+            parts = list(map(int, time_str.split(':')))
+            return timedelta(days=days, hours=parts[0], minutes=parts[1], seconds=parts[2])
+        else:
+            parts = list(map(int, duration_str.split(':')))
+            return timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2])
     except (ValueError, IndexError):
         return timedelta()
 
@@ -47,11 +54,11 @@ def get_historical_time(project, task):
     return "0:00:00"
 
 def log_session(project, task, seconds_spent):
-    if seconds_spent == 0:
+    if seconds_spent < 1:
         return
 
     fieldnames = ['Date', 'Project', 'Task', 'Duration']
-    new_duration = timedelta(seconds=seconds_spent)
+    new_duration = timedelta(seconds=int(seconds_spent))
     records = []
     entry_found = False
 
@@ -59,7 +66,7 @@ def log_session(project, task, seconds_spent):
         with open(LOG_FILE, 'r', newline='') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                if row['Project'] == project and row['Task'] == task:
+                if row.get('Project') == project and row.get('Task') == task:
                     existing_duration = parse_duration(row['Duration'])
                     total_duration = existing_duration + new_duration
                     row['Duration'] = str(total_duration)
@@ -80,6 +87,43 @@ def log_session(project, task, seconds_spent):
         writer.writeheader()
         writer.writerows(records)
 
+def generate_report(project_name):
+    console = Console()
+    if not os.path.isfile(LOG_FILE):
+        console.print(f"[yellow]Log file '{LOG_FILE}' not found.[/yellow]")
+        return
+
+    project_tasks = []
+    with open(LOG_FILE, 'r', newline='') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row.get('Project') == project_name:
+                project_tasks.append(row)
+
+    if not project_tasks:
+        console.print(f"[yellow]No data found for project '{project_name}'.[/yellow]")
+        return
+
+    total_project_time = timedelta()
+    for task in project_tasks:
+        total_project_time += parse_duration(task['Duration'])
+
+    table = Table(title=f"[bold cyan]{project_name}[/bold cyan]")
+    table.add_column("Task", style="magenta")
+    table.add_column("Time Spent", style="green")
+    table.add_column("Percentage", style="blue")
+
+    for task in project_tasks:
+        task_duration = parse_duration(task['Duration'])
+        if total_project_time.total_seconds() > 0:
+            percentage = (task_duration.total_seconds() / total_project_time.total_seconds()) * 100
+        else:
+            percentage = 0
+        table.add_row(task['Task'], str(task_duration), f"{percentage:.2f}%")
+    
+    console.print(table)
+    console.print(f"[bold]Total time for project '{project_name}':[/bold] {total_project_time}")
+
 def run_timer(project_name, task, interval_minutes):
     seconds = 0
     color_index = 0
@@ -91,10 +135,7 @@ def run_timer(project_name, task, interval_minutes):
     historical_time = get_historical_time(project_name, task)
 
     layout = Layout()
-    layout.split(
-        Layout(name="main"),
-        Layout(name="footer", size=1)
-    )
+    layout.split(Layout(name="main"), Layout(name="footer", size=1))
     footer_text = Text("Press Enter to pause/resume. Press Ctrl+C to save and exit.", justify="center", style="dim")
     layout["footer"].update(footer_text)
 
@@ -158,16 +199,23 @@ def run_timer(project_name, task, interval_minutes):
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
         log_session(project_name, task, seconds)
         print("\nTimer stopped.")
-        duration_str = str(timedelta(seconds=seconds))
-        print(f"Total time spent: {duration_str}")
+        duration_str = str(timedelta(seconds=int(seconds)))
+        print(f"Total time spent this session: {duration_str}")
 
 def main():
-    parser = argparse.ArgumentParser(description='A productivity timer with persistent settings, logging, and pause/resume.')
+    parser = argparse.ArgumentParser(description='A productivity timer with reporting features.')
     parser.add_argument('project_name', type=str, nargs='?', help='The name of the project.')
     parser.add_argument('task', type=str, nargs='?', help='The description of the task.')
     parser.add_argument('--set-interval', type=int, metavar='MINUTES', help='Set the default timer interval in minutes for future runs.')
     parser.add_argument('--interval', type=int, metavar='MINUTES', help='Override the default interval for this run.')
+    parser.add_argument('--report', type=str, metavar='PROJECT_NAME', help='Generate a report for a specific project.')
+
     args = parser.parse_args()
+    
+    if args.report:
+        generate_report(args.report)
+        return
+
     config = load_config()
 
     if args.set_interval is not None:
