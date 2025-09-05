@@ -165,7 +165,7 @@ def run_timer(project_name, task, interval_minutes):
 
     layout = Layout()
     layout.split(Layout(name="main"), Layout(name="footer", size=1))
-    footer_text = Text("Press Enter to pause/resume. Press Ctrl+C to save and exit.", justify="center", style="dim")
+    footer_text = Text("Enter:pause/resume. Ctrl+C:save and exit.", justify="center", style="dim")
     layout["footer"].update(footer_text)
 
     old_settings = termios.tcgetattr(sys.stdin)
