@@ -355,7 +355,12 @@ def run_timer(project_name, task, interval_minutes):
     layout["footer"].update(footer_text)
 
     old_settings = termios.tcgetattr(sys.stdin)
-    start_time = datetime.now()
+    
+    # --- NEW: Track segment start time ---
+    session_start_time = datetime.now() # Overall session start
+    current_segment_start_time = datetime.now() # Start of the current active segment
+    # --- END NEW ---
+
     try:
         tty.setcbreak(sys.stdin.fileno())
         with Live(layout, screen=True, redirect_stderr=False, auto_refresh=False) as live:
@@ -380,18 +385,42 @@ def run_timer(project_name, task, interval_minutes):
                     if select.select([sys.stdin], [], [], 0)[0]:
                         key = sys.stdin.read(1)
                         if key == '\n':
-                            paused = not paused
+                            if not paused:
+                                # --- MODIFIED: Pause logic ---
+                                segment_end_time = datetime.now()
+                                log_session(project_name, task, current_segment_start_time, segment_end_time)
+                                paused = True
+                                pause_start_time = datetime.now() # Record when pause started
+                                pause_text = Text("PAUSED (Segment Saved)", justify="center", style="yellow")
+                                paused_content = Group(header_panel, block_text, progress, pause_text)
+                                layout["main"].update(paused_content)
+                                live.refresh()
+                                while paused:
+                                    if select.select([sys.stdin], [], [], 0.1)[0]:
+                                        key = sys.stdin.read(1)
+                                        if key == '\n':
+                                            paused = False
+                                            # --- MODIFIED: Resume logic ---
+                                            current_segment_start_time = datetime.now() # New segment starts now
+                                            # No need to adjust 'seconds' here, as it's total time.
+                                            # The logging handles segment-wise time.
+                                            break # Exit inner while loop
+                                    time.sleep(0.1) # Small sleep to prevent busy-waiting
+                                continue # Continue outer loop after resume
+                            else:
+                                # This case should ideally not be reached if the inner while loop handles resume
+                                # But as a fallback, if somehow 'paused' is true and we get here,
+                                # it means we are trying to resume.
+                                paused = False
+                                current_segment_start_time = datetime.now()
+                                # No need to adjust 'seconds' here, as it's total time.
+                                # The logging handles segment-wise time.
+                                continue # Continue outer loop after resume
 
                     if paused:
-                        pause_text = Text("PAUSED", justify="center", style="yellow")
-                        paused_content = Group(header_panel, block_text, progress, pause_text)
-                        layout["main"].update(paused_content)
-                        live.refresh()
-                        while paused:
-                            if select.select([sys.stdin], [], [], 0.1)[0]:
-                                key = sys.stdin.read(1)
-                                if key == '\n':
-                                    paused = False
+                        # This block is now mostly handled by the inner while loop
+                        # but if we somehow get here while paused, we should just continue
+                        # to the next iteration of the outer loop.
                         continue
 
                     mins, secs = divmod(seconds, 60)
@@ -412,9 +441,12 @@ def run_timer(project_name, task, interval_minutes):
     except KeyboardInterrupt:
         pass
     finally:
-        end_time = datetime.now()
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-        log_session(project_name, task, start_time, end_time)
+        # --- MODIFIED: Final log_session call ---
+        if not paused: # Only log if the timer was running when interrupted
+            final_end_time = datetime.now()
+            log_session(project_name, task, current_segment_start_time, final_end_time)
+        # --- END MODIFIED ---
         print("\nTimer stopped.")
         duration_str = str(timedelta(seconds=int(seconds)))
         print(f"Total time spent this session: {duration_str}")
