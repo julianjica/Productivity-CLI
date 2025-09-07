@@ -14,6 +14,7 @@ This application provides powerful features to help you understand and manage yo
     -   **Overall Summary**: View total time spent across all your projects.
     -   **Project-Specific Reports**: Get a detailed breakdown of time spent on individual tasks within a chosen project.
     -   **Hourly Productivity Graph**: Visualize your activity patterns throughout the day with an ASCII histogram.
+    -   **Daily Productivity Graph**: See your productivity distribution across the days of the week.
     -   **Recent History Graph**: See your daily productivity trends over the last 30 days (or a custom period) with an ASCII histogram.
 -   **Data Persistence**: All your logged sessions are saved to a `productivity_log.csv` file, ensuring your data is never lost.
 -   **Configurable Intervals**: Set a default timer interval for new sessions, saved in `config.json`.
@@ -46,33 +47,38 @@ Run the timer and generate reports directly from your terminal:
 
 -   **Start a new tracking session**:
     ```bash
-    productivity_timer "My Project Name" "Specific Task Description"
+    python productivity_timer.py "My Project Name" "Specific Task Description"
     ```
     *(The timer will start, and you can pause/resume with `Enter` or save/exit with `Ctrl+C`.)*
 
 -   **Set a default timer interval** (e.g., 25 minutes):
     ```bash
-    productivity_timer --set-interval 25
+    python productivity_timer.py --set-interval 25
     ```
 
 -   **Start a session with a custom interval for this run only** (e.g., 45 minutes):
     ```bash
-    productivity_timer "Deep Work" "Coding Feature X" --interval 45
+    python productivity_timer.py "Deep Work" "Coding Feature X" --interval 45
     ```
 
--   **Generate an overall productivity summary report** (includes hourly and recent history graphs for all projects):
+-   **Generate an overall productivity summary report** (includes all graphs for all projects):
     ```bash
-    productivity_timer --report
+    python productivity_timer.py --report
     ```
 
 -   **Generate a detailed report for a specific project** (e.g., "My Project Name"), including task breakdown and graphs:
     ```bash
-    productivity_timer --report "My Project Name"
+    python productivity_timer.py --report "My Project Name"
+    ```
+
+-   **Generate a detailed report for a specific task** within a project:
+    ```bash
+    python productivity_timer.py --report "My Project Name" "Specific Task Description"
     ```
 
 -   **Get help and see all available commands**:
     ```bash
-    productivity_timer --help
+    python productivity_timer.py --help
     ```
 
 ## ❤️ Inspiration
