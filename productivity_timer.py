@@ -174,6 +174,82 @@ def generate_project_report(project_name):
     console.print(table)
     console.print(f"[bold]Total time for project '{project_name}':[/bold] {total_project_time}")
 
+def generate_daily_graph(project_name=None):
+    console.print(f"\n[bold cyan]Daily Productivity Graph ({'All Projects' if project_name is None else f'Project: {project_name}'})[/bold cyan]")
+
+    if not os.path.isfile(LOG_FILE):
+        console.print(f"[yellow]Log file '{LOG_FILE}' not found.[/yellow]")
+        return
+
+    daily_data = defaultdict(timedelta)
+    days_of_week = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+    with open(LOG_FILE, 'r', newline='') as f:
+        reader = csv.DictReader(f)
+        try:
+            for row in reader:
+                if project_name and row.get('Project') != project_name:
+                    continue
+
+                date_str = row.get('Date')
+                duration_str = row.get('Duration')
+
+                if not date_str or not duration_str:
+                    continue
+
+                try:
+                    date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+                    day_of_week = date_obj.weekday()  # Monday is 0 and Sunday is 6
+                    duration = parse_duration(duration_str)
+                    daily_data[day_of_week] += duration
+                except (ValueError, KeyError):
+                    continue
+        except KeyError:
+            console.print(f"[bold red]Warning:[/bold red] The log file '{LOG_FILE}' has an outdated format. Please delete it to start a new log.")
+            return
+
+    if not daily_data:
+        console.print("[yellow]No data found for graph generation.[/yellow]")
+        return
+
+    max_duration_for_scaling = 0
+    for duration in daily_data.values():
+        max_duration_for_scaling = max(max_duration_for_scaling, duration.total_seconds())
+
+    if max_duration_for_scaling == 0:
+        console.print("[yellow]No productive time recorded for graph generation.[/yellow]")
+        return
+
+    max_bar_height = 10
+    CELL_W = 4  # characters per day "column"
+
+    def cell(ch: str) -> str:
+        return ch.center(CELL_W)
+
+    for level in range(max_bar_height, 0, -1):
+        line_parts = []
+        for i in range(7):
+            duration_seconds = daily_data[i].total_seconds()
+            bar_height = int((duration_seconds / max_duration_for_scaling) * max_bar_height)
+            line_parts.append(cell("#") if bar_height >= level else " " * CELL_W)
+        console.print("".join(line_parts))
+
+    tick_row = "".join(cell("-") for _ in range(7))
+    console.print(tick_row)
+
+    label_row = "".join(cell(day) for day in days_of_week)
+    console.print(label_row)
+
+    value_per_hash_seconds = max_duration_for_scaling / max_bar_height
+    if value_per_hash_seconds < 60:
+        legend_display = f"{int(value_per_hash_seconds)}s"
+    elif value_per_hash_seconds < 3600:
+        legend_display = f"{int(value_per_hash_seconds / 60)}m"
+    else:
+        legend_display = f"{value_per_hash_seconds / 3600:.1f}h"
+    console.print(f"One # represents approximately {legend_display} of activity.")
+
+
 def generate_hourly_graph(project_name=None):
     console.print(f"\n[bold cyan]Hourly Productivity Graph ({'All Projects' if project_name is None else f'Project: {project_name}'})[/bold cyan]")
 
@@ -279,6 +355,7 @@ def generate_hourly_graph(project_name=None):
     else:
         legend_display = f"{value_per_hash_seconds / 3600:.1f}h"
     console.print(f"One # represents approximately {legend_display} of activity.")
+
 
 def generate_recent_history_graph(project_name=None, days=30):
     console.print(f"\n[bold cyan]Recent History Histogram ({'All Projects' if project_name is None else f'Project: {project_name}'})[/bold cyan]")
@@ -465,10 +542,12 @@ def main():
         if args.report == '_ALL_PROJECTS_':
             generate_summary_report()
             generate_hourly_graph()
+            generate_daily_graph()
             generate_recent_history_graph()
         else:
             generate_project_report(args.report)
             generate_hourly_graph(args.report)
+            generate_daily_graph(args.report)
             generate_recent_history_graph(args.report)
         return
 
