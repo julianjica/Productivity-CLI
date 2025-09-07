@@ -136,7 +136,7 @@ def generate_summary_report():
     console.print(table)
     console.print(f"[bold]Grand total time for all projects:[/bold] {grand_total_time}")
 
-def generate_project_report(project_name):
+def generate_project_report(project_name, task_name=None):
     if not os.path.isfile(LOG_FILE):
         console.print(f"[yellow]Log file '{LOG_FILE}' not found.[/yellow]")
         return
@@ -147,13 +147,17 @@ def generate_project_report(project_name):
         try:
             for row in reader:
                 if row.get('Project') == project_name:
-                    task_times[row['Task']] += parse_duration(row['Duration'])
+                    if task_name is None or row.get('Task') == task_name:
+                        task_times[row['Task']] += parse_duration(row['Duration'])
         except KeyError:
             console.print(f"[bold red]Warning:[/bold red] The log file '{LOG_FILE}' has an outdated format. Please delete it to start a new log.")
             return
 
     if not task_times:
-        console.print(f"[yellow]No data found for project '{project_name}'.[/yellow]")
+        if task_name:
+            console.print(f"[yellow]No data found for task '{task_name}' in project '{project_name}'.[/yellow]")
+        else:
+            console.print(f"[yellow]No data found for project '{project_name}'.[/yellow]")
         return
 
     total_project_time = sum(task_times.values(), timedelta())
@@ -170,12 +174,17 @@ def generate_project_report(project_name):
             percentage = 0
         table.add_row(task, str(total_time), f"{percentage:.2f}%")
     
-    console.print(f"Productivity Report for Project: [bold cyan]{project_name}[/bold cyan]")
+    title = f"Productivity Report for Project: [bold cyan]{project_name}[/bold cyan]"
+    if task_name:
+        title += f" - Task: [bold cyan]{task_name}[/bold cyan]"
+    console.print(title)
     console.print(table)
-    console.print(f"[bold]Total time for project '{project_name}':[/bold] {total_project_time}")
+    console.print(f"[bold]Total time for selection: [/bold] {total_project_time}")
 
-def generate_daily_graph(project_name=None):
-    console.print(f"\n[bold cyan]Daily Productivity Graph ({'All Projects' if project_name is None else f'Project: {project_name}'})[/bold cyan]")
+def generate_daily_graph(project_name=None, task_name=None):
+    title_project = 'All Projects' if project_name is None else f'Project: {project_name}'
+    title_task = '' if task_name is None else f', Task: {task_name}'
+    console.print(f"\n[bold cyan]Daily Productivity Graph ({title_project}{title_task})[/bold cyan]")
 
     if not os.path.isfile(LOG_FILE):
         console.print(f"[yellow]Log file '{LOG_FILE}' not found.[/yellow]")
@@ -189,6 +198,8 @@ def generate_daily_graph(project_name=None):
         try:
             for row in reader:
                 if project_name and row.get('Project') != project_name:
+                    continue
+                if task_name and row.get('Task') != task_name:
                     continue
 
                 date_str = row.get('Date')
@@ -207,6 +218,7 @@ def generate_daily_graph(project_name=None):
         except KeyError:
             console.print(f"[bold red]Warning:[/bold red] The log file '{LOG_FILE}' has an outdated format. Please delete it to start a new log.")
             return
+
 
     if not daily_data:
         console.print("[yellow]No data found for graph generation.[/yellow]")
@@ -250,8 +262,10 @@ def generate_daily_graph(project_name=None):
     console.print(f"One # represents approximately {legend_display} of activity.")
 
 
-def generate_hourly_graph(project_name=None):
-    console.print(f"\n[bold cyan]Hourly Productivity Graph ({'All Projects' if project_name is None else f'Project: {project_name}'})[/bold cyan]")
+def generate_hourly_graph(project_name=None, task_name=None):
+    title_project = 'All Projects' if project_name is None else f'Project: {project_name}'
+    title_task = '' if task_name is None else f', Task: {task_name}'
+    console.print(f"\n[bold cyan]Hourly Productivity Graph ({title_project}{title_task})[/bold cyan]")
 
     if not os.path.isfile(LOG_FILE):
         console.print(f"[yellow]Log file '{LOG_FILE}' not found.[/yellow]")
@@ -265,6 +279,8 @@ def generate_hourly_graph(project_name=None):
         try:
             for row in reader:
                 if project_name and row.get('Project') != project_name:
+                    continue
+                if task_name and row.get('Task') != task_name:
                     continue
 
                 start_time_str = row.get('Start Time')
@@ -294,6 +310,7 @@ def generate_hourly_graph(project_name=None):
         except KeyError:
             console.print(f"[bold red]Warning:[/bold red] The log file '{LOG_FILE}' has an outdated format. Please delete it to start a new log.")
             return
+
 
     if not hourly_data:
         console.print("[yellow]No data found for graph generation.[/yellow]")
@@ -357,8 +374,10 @@ def generate_hourly_graph(project_name=None):
     console.print(f"One # represents approximately {legend_display} of activity.")
 
 
-def generate_recent_history_graph(project_name=None, days=30):
-    console.print(f"\n[bold cyan]Recent History Histogram ({'All Projects' if project_name is None else f'Project: {project_name}'})[/bold cyan]")
+def generate_recent_history_graph(project_name=None, task_name=None, days=30):
+    title_project = 'All Projects' if project_name is None else f'Project: {project_name}'
+    title_task = '' if task_name is None else f', Task: {task_name}'
+    console.print(f"\n[bold cyan]Recent History Histogram ({title_project}{title_task})[/bold cyan]")
 
     if not os.path.isfile(LOG_FILE):
         console.print(f"[yellow]Log file '{LOG_FILE}' not found.[/yellow]")
@@ -374,6 +393,8 @@ def generate_recent_history_graph(project_name=None, days=30):
         for row in reader:
             if project_name and row.get('Project') != project_name:
                 continue
+            if task_name and row.get('Task') != task_name:
+                continue
 
             try:
                 session_date = datetime.strptime(row['Date'], "%Y-%m-%d").date()
@@ -385,6 +406,7 @@ def generate_recent_history_graph(project_name=None, days=30):
                     max_hours = max(max_hours, daily_hours[delta_days])
             except (ValueError, KeyError):
                 continue
+
 
     if max_hours == 0:
         console.print("[yellow]No recent activity found.[/yellow]")
@@ -534,21 +556,29 @@ def main():
     parser.add_argument('task', type=str, nargs='?', help='The description of the task.')
     parser.add_argument('--set-interval', type=int, metavar='MINUTES', help='Set the default timer interval in minutes for future runs.')
     parser.add_argument('--interval', type=int, metavar='MINUTES', help='Override the default interval for this run.')
-    parser.add_argument('--report', nargs='?', const='_ALL_PROJECTS_', default=None, help='Generate a report. Provide a project name for a detailed report, or no name for a summary.')
+    parser.add_argument('--report', action='store_true', help='Generate a report. Can be filtered by project and task.')
 
     args = parser.parse_args()
     
-    if args.report is not None:
-        if args.report == '_ALL_PROJECTS_':
+    if args.report:
+        if not args.project_name:
+            # Summary report for all projects
             generate_summary_report()
             generate_hourly_graph()
             generate_daily_graph()
             generate_recent_history_graph()
+        elif not args.task:
+            # Report for a specific project
+            generate_project_report(args.project_name)
+            generate_hourly_graph(args.project_name)
+            generate_daily_graph(args.project_name)
+            generate_recent_history_graph(args.project_name)
         else:
-            generate_project_report(args.report)
-            generate_hourly_graph(args.report)
-            generate_daily_graph(args.report)
-            generate_recent_history_graph(args.report)
+            # Report for a specific task in a project
+            generate_project_report(args.project_name, args.task)
+            generate_hourly_graph(args.project_name, args.task)
+            generate_daily_graph(args.project_name, args.task)
+            generate_recent_history_graph(args.project_name, args.task)
         return
 
 
